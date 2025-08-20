@@ -1,5 +1,7 @@
 FROM nginx:alpine
 
+ARG PORT=8080
+
 RUN mkdir -p /etc/nginx/templates
 COPY proxy.conf /etc/nginx/templates/default.conf.template
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -16,9 +18,9 @@ RUN mkdir -p /etc/ssl/certs
 #ENV MTLS_CERT_PATH=
 #ENV MTLS_CA_CERT_PATH=
 #ENV MTLS_VERIFY_CERT=off
-ENV PORT=8888
+ENV PORT=$PORT
 
-EXPOSE 8888
+EXPOSE $PORT
 
 # Use custom entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
