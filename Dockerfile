@@ -1,6 +1,8 @@
-FROM nginx:alpine
+FROM nginxinc/nginx-unprivileged:latest
 
 ARG PORT=8080
+
+USER 0
 
 RUN mkdir -p /etc/nginx/templates
 COPY proxy.conf /etc/nginx/templates/default.conf.template
@@ -9,9 +11,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # Make entrypoint script executable
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Create directory for certificates
-RUN mkdir -p /etc/ssl/certs
-
+USER 1001
 # Environment variables for proxy configuration
 #ENV PROXY_TARGET=
 #ENV MTLS_KEY_PATH=
