@@ -1,7 +1,9 @@
 #!/bin/sh
 
 # Set default values for optional configuration
-MTLS_VERIFY_CERT=${MTLS_VERIFY_CERT:-"off"}
+if [ -z "$MTLS_VERIFY_CERT" ]; then
+    MTLS_VERIFY_CERT=([ -z "$MTLS_CA_CERT_PATH" ] && echo "off" || echo "on")
+fi
 
 # Generate conditional configuration strings
 MTLS_CA_CONFIG=""
@@ -22,6 +24,9 @@ if [ -n "$MTLS_CA_CERT_PATH" ] && [ -f "$MTLS_CA_CERT_PATH" ]; then
     if [ "$MTLS_VERIFY_CERT" != "off" ]; then
         echo "[INFO] Enabling certificate verification: $MTLS_VERIFY_CERT"
         MTLS_VERIFY_CONFIG="proxy_ssl_verify $MTLS_VERIFY_CERT;"
+        if [ -n "$MTLS_VERIFY_DEPTH" ]; then
+            MTLS_VERIFY_CONFIG="$MTLS_VERIFY_CONFIG\nproxy_ssl_verify_depth $MTLS_VERIFY_DEPTH;"
+        fi
     fi
 else
     echo "[WARNING] No CA certificate configured or file not found. SSL verification disabled."
