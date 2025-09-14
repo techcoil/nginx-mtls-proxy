@@ -14,6 +14,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 USER 1001
 # Environment variables for proxy configuration
 #ENV PROXY_TARGET=
+#ENV PROXY_HOST_HEADER=
 #ENV MTLS_KEY_PATH=
 #ENV MTLS_CERT_PATH=
 #ENV MTLS_CA_CERT_PATH=

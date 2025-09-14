@@ -2,18 +2,31 @@
 
 # Set default values for optional configuration
 if [ -z "$MTLS_VERIFY_CERT" ]; then
-    MTLS_VERIFY_CERT=([ -z "$MTLS_CA_CERT_PATH" ] && echo "off" || echo "on")
+	if [ -z "$MTLS_CA_CERT_PATH" ]; then
+		MTLS_VERIFY_CERT="off"
+	else
+		MTLS_VERIFY_CERT="on"
+	fi
 fi
 
 # Generate conditional configuration strings
 MTLS_CA_CONFIG=""
 MTLS_VERIFY_CONFIG=""
 MTLS_CERTIFICATES=""
+HOST_HEADER_CONFIG=""
 
 if [ -z "$PROXY_TARGET" ]; then
 	echo "[ERROR] PROXY_TARGET is a required env variable" >&2
 	exit 1
 fi
+
+if [ -z "$PROXY_HOST_HEADER" ]; then
+	PROXY_HOST_HEADER='$host'
+else 
+	echo "[INFO] Configuring Host override for ${PROXY_HOST_HEADER}"
+fi
+
+HOST_HEADER_CONFIG="proxy_set_header Host ${PROXY_HOST_HEADER};"
 
 # Only add CA certificate configuration if MTLS_CA_CERT_PATH is set and file exists
 if [ -n "$MTLS_CA_CERT_PATH" ] && [ -f "$MTLS_CA_CERT_PATH" ]; then
@@ -46,6 +59,7 @@ fi
 export MTLS_CA_CONFIG
 export MTLS_VERIFY_CONFIG
 export MTLS_CERTIFICATES
+export HOST_HEADER_CONFIG
 
 # Start nginx with the original Docker entrypoint
 exec /docker-entrypoint.sh "$@"
