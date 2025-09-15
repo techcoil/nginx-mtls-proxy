@@ -3,6 +3,7 @@ FROM nginxinc/nginx-unprivileged:latest
 ARG PORT=8080
 
 USER 0
+RUN apt update
 
 RUN mkdir -p /etc/nginx/templates
 COPY proxy.conf /etc/nginx/templates/default.conf.template

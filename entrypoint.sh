@@ -21,7 +21,7 @@ if [ -z "$PROXY_TARGET" ]; then
 fi
 
 if [ -z "$PROXY_HOST_HEADER" ]; then
-	PROXY_HOST_HEADER='$host'
+	PROXY_HOST_HEADER='$proxy_host'
 else 
 	echo "[INFO] Configuring Host override for ${PROXY_HOST_HEADER}"
 fi
