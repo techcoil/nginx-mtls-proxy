@@ -38,7 +38,7 @@ if [ -n "$MTLS_CA_CERT_PATH" ] && [ -f "$MTLS_CA_CERT_PATH" ]; then
         echo "[INFO] Enabling certificate verification: $MTLS_VERIFY_CERT"
         MTLS_VERIFY_CONFIG="proxy_ssl_verify $MTLS_VERIFY_CERT;"
         if [ -n "$MTLS_VERIFY_DEPTH" ]; then
-            MTLS_VERIFY_CONFIG="$MTLS_VERIFY_CONFIG\nproxy_ssl_verify_depth $MTLS_VERIFY_DEPTH;"
+            MTLS_VERIFY_CONFIG="$MTLS_VERIFY_CONFIG proxy_ssl_verify_depth $MTLS_VERIFY_DEPTH;"
         fi
     fi
 else
@@ -49,8 +49,8 @@ fi
 
 if [ -n "$MTLS_CERT_PATH" ] && [ -f "$MTLS_CERT_PATH" ] && [ -n "$MTLS_KEY_PATH" ] && [ -f "$MTLS_KEY_PATH" ]; then
 	MTLS_CERTIFICATES="\
-		proxy_ssl_certificate "${MTLS_CERT_PATH}";\
-		proxy_ssl_certificate_key "${MTLS_KEY_PATH}";"
+		proxy_ssl_certificate \"${MTLS_CERT_PATH}\";\
+		proxy_ssl_certificate_key \"${MTLS_KEY_PATH}\";"
 else 
 	echo "[WARNING] Proxy running with NO mtls - to configure mtls, you must provide both MTLS_CERT_PATH and MTLS_KEY_PATH" >&2
 fi
