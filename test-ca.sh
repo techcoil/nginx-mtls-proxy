@@ -20,6 +20,7 @@ BASIC_PORT=8888
 CA_PORT=8889
 UNTRUSTED_CA_PORT=8890
 VERIFY_DEPTH_PORT=8891
+UNTRUSTED_CLIENT_PORT=8892
 CONTAINER_PORT=8080 # default PORT in the Dockerfile
 CERT_DIR="test-certs/generated"
 TEST_LABEL="nginx-mtls-proxy-test"
@@ -90,10 +91,10 @@ start_server() {
   done
 }
 
-# run_proxy <name> <host-port> <backend-port> [extra docker args...]
+# run_proxy <name> <host-port> <backend-port> <client-cert-name> [extra docker args...]
 run_proxy() {
-  local name=$1 port=$2 backend_port=$3
-  shift 3
+  local name=$1 port=$2 backend_port=$3 client_cert=$4
+  shift 4
   docker run -d \
     --rm \
     --label "${TEST_LABEL}" \
@@ -102,8 +103,8 @@ run_proxy() {
     --add-host=host.docker.internal:host-gateway \
     -v "$(pwd)/${CERT_DIR}:/certs" \
     -e PROXY_TARGET="https://host.docker.internal:${backend_port}" \
-    -e MTLS_CERT_PATH="/certs/client.pem" \
-    -e MTLS_KEY_PATH="/certs/client-key.pem" \
+    -e MTLS_CERT_PATH="/certs/${client_cert}.pem" \
+    -e MTLS_KEY_PATH="/certs/${client_cert}-key.pem" \
     "$@" \
     nginx-mtls-proxy > /dev/null
 }
@@ -140,7 +141,7 @@ expect_status() {
 
 remove_test_containers
 
-for port in $SERVER_PORT $UNTRUSTED_SERVER_PORT $BASIC_PORT $CA_PORT $UNTRUSTED_CA_PORT $VERIFY_DEPTH_PORT; do
+for port in $SERVER_PORT $UNTRUSTED_SERVER_PORT $BASIC_PORT $CA_PORT $UNTRUSTED_CA_PORT $VERIFY_DEPTH_PORT $UNTRUSTED_CLIENT_PORT; do
   if port_in_use "$port"; then
     echo "Port $port is already in use. Free it before running this test:"
     lsof -nP -iTCP:"$port" -sTCP:LISTEN || true
@@ -160,20 +161,22 @@ start_server $SERVER_PORT server
 start_server $UNTRUSTED_SERVER_PORT untrusted-server
 
 echo "Starting proxies..."
-run_proxy basic $BASIC_PORT $SERVER_PORT
-run_proxy ca $CA_PORT $SERVER_PORT \
+run_proxy basic $BASIC_PORT $SERVER_PORT client
+run_proxy ca $CA_PORT $SERVER_PORT client \
   -e MTLS_CA_CERT_PATH="/certs/ca.crt"
-run_proxy untrusted-ca $UNTRUSTED_CA_PORT $UNTRUSTED_SERVER_PORT \
+run_proxy untrusted-ca $UNTRUSTED_CA_PORT $UNTRUSTED_SERVER_PORT client \
   -e MTLS_CA_CERT_PATH="/certs/ca.crt"
-run_proxy verify-depth $VERIFY_DEPTH_PORT $SERVER_PORT \
+run_proxy verify-depth $VERIFY_DEPTH_PORT $SERVER_PORT client \
   -e MTLS_CA_CERT_PATH="/certs/ca.crt" \
   -e MTLS_VERIFY_DEPTH=2
+run_proxy untrusted-client $UNTRUSTED_CLIENT_PORT $SERVER_PORT untrusted-client
 
 echo "Running tests..."
 expect_status "Basic proxy (no CA verification)" $BASIC_PORT 200
 expect_status "CA-verified proxy" $CA_PORT 200
 expect_status "CA-verified proxy rejects backend cert from untrusted CA" $UNTRUSTED_CA_PORT 502
 expect_status "CA-verified proxy with MTLS_VERIFY_DEPTH" $VERIFY_DEPTH_PORT 200
+expect_status "Backend rejects client cert from untrusted CA" $UNTRUSTED_CLIENT_PORT 401
 
 if [ $FAILED -ne 0 ]; then
   echo "Test failed!"

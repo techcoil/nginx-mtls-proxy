@@ -11,6 +11,7 @@
 #   client.pem / client-key.pem          - mTLS client cert signed by the test CA
 #   untrusted-ca.crt / untrusted-ca.key  - unrelated CA, for negative tests
 #   untrusted-server.pem / untrusted-server-key.pem - backend server cert signed by the untrusted CA
+#   untrusted-client.pem / untrusted-client-key.pem - mTLS client cert signed by the untrusted CA
 set -e
 
 OUT_DIR="${1:-$(dirname "$0")/generated}"
@@ -70,6 +71,7 @@ new_cert client "test-client" client.ext ca
 
 new_ca untrusted-ca "nginx-mtls-proxy untrusted test CA"
 new_cert untrusted-server "localhost" server.ext untrusted-ca
+new_cert untrusted-client "untrusted-test-client" client.ext untrusted-ca
 
 rm -f "$OUT_DIR"/*.srl
 

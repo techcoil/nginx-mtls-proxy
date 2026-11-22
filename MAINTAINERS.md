@@ -31,6 +31,7 @@ docker build -t nginx-mtls-proxy .
 - with CA verification
 - with CA verification against a backend whose certificate comes from an untrusted CA (must be rejected with HTTP 502)
 - with `MTLS_VERIFY_DEPTH` set
+- with a client certificate from an untrusted CA (the backend must reject it with HTTP 401)
 
 ```bash
 ./test-ca.sh      # run the tests

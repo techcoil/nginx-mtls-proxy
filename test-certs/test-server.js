@@ -26,20 +26,16 @@ https
       if (VERBOSE) {
         console.log('cert', cert);
       }
-     
-      if(Object.keys(cert).length > 0 && cert) {
-        res.setHeader('Content-Type', 'application/json');
-        res.writeHead(200);
-        return res.end(JSON.stringify(cert));
-      }
+
+      // Only accept client certificates signed by the test CA
       if (!req.client.authorized) {
         res.writeHead(401);
         return res.end('Invalid client certificate authentication.');
       }
 
-
+      res.setHeader('Content-Type', 'application/json');
       res.writeHead(200);
-      res.end('Hello, world!');
+      res.end(JSON.stringify(cert));
     }
   )
   .listen(PORT, '0.0.0.0', () => {
