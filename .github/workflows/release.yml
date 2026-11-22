@@ -51,9 +51,12 @@ jobs:
           release=false
           if git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
             changed=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
-            from_before=$(git show "${BEFORE}:Dockerfile" | grep -m1 '^FROM ')
-            from_after=$(grep -m1 '^FROM ' Dockerfile)
-            if [ "$changed" = "Dockerfile" ] && [ "$from_before" != "$from_after" ]; then
+            from_before=$(git show "${BEFORE}:Dockerfile" | grep '^FROM ' || true)
+            from_after=$(grep '^FROM ' Dockerfile || true)
+            # Everything except the FROM lines must be unchanged
+            rest_before=$(git show "${BEFORE}:Dockerfile" | grep -v '^FROM ' || true)
+            rest_after=$(grep -v '^FROM ' Dockerfile || true)
+            if [ "$changed" = "Dockerfile" ] && [ "$from_before" != "$from_after" ] && [ "$rest_before" = "$rest_after" ]; then
               release=true
             fi
           fi
