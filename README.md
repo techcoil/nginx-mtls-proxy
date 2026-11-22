@@ -60,10 +60,11 @@ Images are published to [`quay.io/techcoil/nginx-mtls-proxy`](https://quay.io/re
 
 | Tag | Example | Meaning |
 |-----|---------|---------|
-| `v<version>` | `v0.1.4` | Exact proxy release (recommended for production) |
-| `v<major>.<minor>` | `v0.1` | Latest patch of a proxy minor version |
-| `nginx-<nginx-version>` | `nginx-1.30.8` | Latest proxy release built on that nginx version |
-| `latest` | | Latest release |
+| `v<version>` | `v0.0.6` | Proxy release, rebuilt automatically on the newest nginx stable (recommended) |
+| `v<version>-nginx-<nginx-version>` | `v0.0.6-nginx-1.30.7` | Proxy release on a specific nginx version |
+| `nginx-<nginx-version>` | `nginx-1.30.7` | Newest proxy release on a specific nginx version |
+
+The proxy version only changes when the proxy itself changes. New nginx releases and base image security fixes are published as rebuilds of the current version: `v<version>` moves to the new build, and a new `v<version>-nginx-<nginx-version>` tag is added. Each release's GitHub release notes list all of its builds.
 
 Every release is signed with [cosign](https://github.com/sigstore/cosign) (keyless) and ships with SBOM and provenance attestations. The GitHub release notes include the exact `cosign verify` command.
 
@@ -78,7 +79,7 @@ docker run -d \
   -e PROXY_TARGET=https://api.example.com \
   -e MTLS_CERT_PATH=/certs/client.pem \
   -e MTLS_KEY_PATH=/certs/client-key.pem \
-  quay.io/techcoil/nginx-mtls-proxy:v0.1
+  quay.io/techcoil/nginx-mtls-proxy:v0.0.6
 ```
 
 ### Docker Run (With CA Verification)
@@ -91,7 +92,7 @@ docker run -d \
   -e MTLS_CERT_PATH=/certs/client.pem \
   -e MTLS_KEY_PATH=/certs/client-key.pem \
   -e MTLS_CA_CERT_PATH=/certs/ca.pem \
-  quay.io/techcoil/nginx-mtls-proxy:v0.1
+  quay.io/techcoil/nginx-mtls-proxy:v0.0.6
 ```
 
 ### Kubernetes Sidecar
@@ -120,7 +121,7 @@ spec:
           value: "http://localhost:8080"
       
       - name: mtls-proxy
-        image: quay.io/techcoil/nginx-mtls-proxy:v0.1
+        image: quay.io/techcoil/nginx-mtls-proxy:v0.0.6
         ports:
         - containerPort: 8080
         env:
@@ -153,7 +154,7 @@ services:
       - mtls-proxy
 
   mtls-proxy:
-    image: quay.io/techcoil/nginx-mtls-proxy:v0.1
+    image: quay.io/techcoil/nginx-mtls-proxy:v0.0.6
     environment:
       - PROXY_TARGET=https://api.example.com
       - MTLS_CERT_PATH=/certs/client.pem

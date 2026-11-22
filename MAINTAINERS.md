@@ -51,20 +51,33 @@ Every pull request runs:
 
 The base image is pinned by tag and digest in the `Dockerfile` and kept up to date by [Renovate](https://docs.renovatebot.com/), restricted to nginx **stable** (even minor versions) on **Alpine**:
 
-- **nginx patch releases and base image rebuilds** (e.g. Alpine security fixes) are opened as PRs and auto-merged once CI passes. The merge automatically publishes the next patch version.
-- **nginx stable minor releases** (e.g. 1.30 → 1.32, roughly yearly) are opened as PRs for manual review. Merging them also publishes a patch version.
-- **Other changes** are released manually: *Actions → Release → Run workflow* and choose `patch`, `minor` or `major`.
+- **nginx patch releases and base image rebuilds** (e.g. Alpine security fixes) are opened as PRs and auto-merged once CI passes.
+- **nginx stable minor releases** (e.g. 1.30 → 1.32, roughly yearly) are opened as PRs for manual review.
+- **App changes** are released manually: *Actions → Release → Run workflow* and choose `patch`, `minor` or `major`.
 
-A push to `master` triggers an automatic release only when it changes nothing but the `FROM` line of the `Dockerfile` - i.e. a merged Renovate PR. Anything else needs a manual release.
+The app version only changes on a manual release. The Release workflow runs in one of two modes:
 
-Each release:
+| Mode | Trigger | Version | GitHub |
+|------|---------|---------|--------|
+| `release` | Manual run | Next `patch` / `minor` / `major` | Creates the `vX.Y.Z` git tag and GitHub release |
+| `rebuild` | Push to `master` that changes nothing but the `Dockerfile` `FROM` line (a merged Renovate PR), or a manual run choosing `rebuild` | Latest existing `vX.Y.Z`, rebuilt from `master` | Appends the build to the `vX.Y.Z` GitHub release |
+
+Because a rebuild publishes `master` under the latest version, release app changes before (or together with) the next base image update - don't leave unreleased changes on `master`.
+
+Each run:
 
 1. Runs the CI workflow (tests + multi-arch build)
 2. Builds and pushes the `linux/amd64` + `linux/arm64` image with SBOM and provenance attestations
 3. Signs the image with cosign (keyless, GitHub OIDC)
-4. Creates the `vX.Y.Z` git tag and a GitHub release with image digest, tags and the `cosign verify` command
+4. Creates or updates the GitHub release with the build's nginx version, image digest, tags and the `cosign verify` command
 
-Published tags: `vX.Y.Z`, `vX.Y`, `vX`, `nginx-<nginx-version>` and `latest`.
+Published tags:
+
+| Tag | Moves when |
+|-----|------------|
+| `vX.Y.Z` | Every rebuild of that version |
+| `vX.Y.Z-nginx-A.B.C` | Only on a digest-only base image update (same nginx version, patched OS) |
+| `nginx-A.B.C` | A newer app version is released on that nginx version |
 
 Quay's own GitHub build trigger must stay disabled - GitHub Actions is the only publisher. Otherwise every release tag would also produce a separate single-arch, unsigned image.
 

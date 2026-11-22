@@ -1,9 +1,17 @@
 name: Release
 
-# Releases happen in two ways:
-# - Automatically, when a push to master only changes the base image (FROM line) in the Dockerfile,
-#   i.e. a merged Renovate PR. This cuts the next patch version.
-# - Manually, via "Run workflow", choosing patch / minor / major.
+# The app version (vX.Y.Z) only changes when the app changes. nginx updates rebuild the latest version.
+#
+# - release: manual, via "Run workflow", choosing patch / minor / major. Creates a new version,
+#   git tag and GitHub release.
+# - rebuild: automatic, when a push to master only changes the base image (FROM line) in the Dockerfile,
+#   i.e. a merged Renovate PR, or manual, choosing "rebuild". Rebuilds master as the latest released
+#   version on the current base image and appends the build to that version's GitHub release.
+#
+# Published image tags:
+#   vX.Y.Z               - the version, on the newest nginx it was built with
+#   vX.Y.Z-nginx-A.B.C   - the version on a specific nginx
+#   nginx-A.B.C          - the newest version on a specific nginx
 
 on:
   push:
@@ -12,9 +20,9 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: Version bump
+        description: Version bump, or "rebuild" to republish the latest version without a bump
         type: choice
-        options: [patch, minor, major]
+        options: [patch, minor, major, rebuild]
         default: patch
 
 concurrency:
@@ -28,7 +36,7 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
-      release: ${{ steps.check.outputs.release }}
+      mode: ${{ steps.check.outputs.mode }}
       version: ${{ steps.version.outputs.version }}
       base_image: ${{ steps.version.outputs.base_image }}
       nginx_version: ${{ steps.version.outputs.nginx_version }}
@@ -37,18 +45,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Decide whether to release
+      - name: Decide release mode
         id: check
         env:
           EVENT_NAME: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
+          BUMP: ${{ inputs.bump }}
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "release=true" >> "$GITHUB_OUTPUT"
+            if [ "$BUMP" = "rebuild" ]; then
+              echo "mode=rebuild" >> "$GITHUB_OUTPUT"
+            else
+              echo "mode=release" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
 
-          release=false
+          mode=none
           if git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
             changed=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
             from_before=$(git show "${BEFORE}:Dockerfile" | grep '^FROM ' || true)
@@ -57,38 +70,48 @@ jobs:
             rest_before=$(git show "${BEFORE}:Dockerfile" | grep -v '^FROM ' || true)
             rest_after=$(grep -v '^FROM ' Dockerfile || true)
             if [ "$changed" = "Dockerfile" ] && [ "$from_before" != "$from_after" ] && [ "$rest_before" = "$rest_after" ]; then
-              release=true
+              mode=rebuild
             fi
           fi
-          echo "Base image update only: $release"
-          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "Mode: $mode"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
 
       - name: Compute version
         id: version
-        if: steps.check.outputs.release == 'true'
+        if: steps.check.outputs.mode != 'none'
         env:
+          MODE: ${{ steps.check.outputs.mode }}
           BUMP: ${{ inputs.bump || 'patch' }}
         run: |
-          last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
-          IFS=. read -r major minor patch <<< "${last:-v0.0.0}"
-          major=${major#v}
-          case "$BUMP" in
-            major) major=$((major + 1)); minor=0; patch=0 ;;
-            minor) minor=$((minor + 1)); patch=0 ;;
-            patch) patch=$((patch + 1)) ;;
-            *) echo "::error::Unknown bump '$BUMP'"; exit 1 ;;
-          esac
-          version="${major}.${minor}.${patch}"
+          last=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
 
-          if git rev-parse -q --verify "refs/tags/v${version}" > /dev/null; then
-            echo "::error::Tag v${version} already exists"
-            exit 1
+          if [ "$MODE" = "rebuild" ]; then
+            if [ -z "$last" ]; then
+              echo "::error::No released version to rebuild - run a manual release first"
+              exit 1
+            fi
+            version=${last#v}
+          else
+            IFS=. read -r major minor patch <<< "${last:-v0.0.0}"
+            major=${major#v}
+            case "$BUMP" in
+              major) major=$((major + 1)); minor=0; patch=0 ;;
+              minor) minor=$((minor + 1)); patch=0 ;;
+              patch) patch=$((patch + 1)) ;;
+              *) echo "::error::Unknown bump '$BUMP'"; exit 1 ;;
+            esac
+            version="${major}.${minor}.${patch}"
+
+            if git rev-parse -q --verify "refs/tags/v${version}" > /dev/null; then
+              echo "::error::Tag v${version} already exists"
+              exit 1
+            fi
           fi
 
           base_image=$(grep -m1 '^FROM ' Dockerfile | awk '{print $2}')
           nginx_version=$(echo "$base_image" | sed -E 's/^[^:]+:([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
 
-          echo "Releasing v${version} (previous: ${last:-none}, nginx ${nginx_version})"
+          echo "${MODE}: v${version} (latest tag: ${last:-none}, nginx ${nginx_version})"
           {
             echo "version=${version}"
             echo "base_image=${base_image}"
@@ -97,18 +120,19 @@ jobs:
 
   test:
     needs: prepare
-    if: needs.prepare.outputs.release == 'true'
+    if: needs.prepare.outputs.mode != 'none'
     uses: ./.github/workflows/ci.yml
 
   publish:
     needs: [prepare, test]
-    if: needs.prepare.outputs.release == 'true'
+    if: needs.prepare.outputs.mode != 'none'
     runs-on: ubuntu-latest
     permissions:
       contents: write # create tag + GitHub release
       id-token: write # cosign keyless signing
     env:
       IMAGE: ${{ vars.REGISTRY }}/${{ vars.IMAGE_NAME }}
+      MODE: ${{ needs.prepare.outputs.mode }}
       VERSION: ${{ needs.prepare.outputs.version }}
       NGINX_VERSION: ${{ needs.prepare.outputs.nginx_version }}
       BASE_IMAGE: ${{ needs.prepare.outputs.base_image }}
@@ -135,11 +159,10 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
-          flavor: latest=true
+          flavor: latest=false
           tags: |
-            type=semver,pattern=v{{version}},value=v${{ env.VERSION }}
-            type=semver,pattern=v{{major}}.{{minor}},value=v${{ env.VERSION }}
-            type=semver,pattern=v{{major}},value=v${{ env.VERSION }}
+            type=raw,value=v${{ env.VERSION }}
+            type=raw,value=v${{ env.VERSION }}-nginx-${{ env.NGINX_VERSION }}
             type=raw,value=nginx-${{ env.NGINX_VERSION }}
           labels: |
             org.opencontainers.image.version=${{ env.VERSION }}
@@ -163,7 +186,7 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: cosign sign --yes "${IMAGE}@${DIGEST}"
 
-      - name: Create tag and GitHub release
+      - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           DIGEST: ${{ steps.build.outputs.digest }}
@@ -174,14 +197,14 @@ jobs:
             tag_list="${tag_list}- \`${tag}\`"$'\n'
           done
 
-          notes=$(cat <<EOF
-          **nginx ${NGINX_VERSION}** (\`${BASE_IMAGE%@*}\`)
+          build_notes=$(cat <<EOF
+          ### Build: nginx ${NGINX_VERSION} ($(date -u +%Y-%m-%d))
 
+          Base image: \`${BASE_IMAGE%@*}\`
           Image: \`${IMAGE}@${DIGEST}\`
 
           Tags:
           ${tag_list}
-
           Verify the signature:
           \`\`\`sh
           cosign verify ${IMAGE}@${DIGEST} \\
@@ -190,8 +213,16 @@ jobs:
           \`\`\`
           EOF
           )
-          gh release create "v${VERSION}" \
-            --target "$GITHUB_SHA" \
-            --title "v${VERSION}" \
-            --notes "$notes" \
-            --generate-notes
+
+          if [ "$MODE" = "release" ]; then
+            gh release create "v${VERSION}" \
+              --target "$GITHUB_SHA" \
+              --title "v${VERSION}" \
+              --notes "$build_notes" \
+              --generate-notes
+          elif gh release view "v${VERSION}" > /dev/null 2>&1; then
+            body=$(gh release view "v${VERSION}" --json body --jq .body)
+            gh release edit "v${VERSION}" --notes "${body}"$'\n\n'"${build_notes}"
+          else
+            gh release create "v${VERSION}" --verify-tag --title "v${VERSION}" --notes "$build_notes"
+          fi
