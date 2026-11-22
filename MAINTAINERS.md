@@ -63,7 +63,9 @@ Each release:
 3. Signs the image with cosign (keyless, GitHub OIDC)
 4. Creates the `vX.Y.Z` git tag and a GitHub release with image digest, tags and the `cosign verify` command
 
-Published tags: `X.Y.Z`, `X.Y`, `nginx-<nginx-version>` and `latest`.
+Published tags: `vX.Y.Z`, `vX.Y`, `vX`, `nginx-<nginx-version>` and `latest`.
+
+Quay's own GitHub build trigger must stay disabled - GitHub Actions is the only publisher. Otherwise every release tag would also produce a separate single-arch, unsigned image.
 
 ## One-time Setup
 
