@@ -1,0 +1,6 @@
+# Generated on each run by test-certs/gen-certs.sh
+test-certs/generated/
+
+# Local-only test files (personal certs / env)
+test-mtls/
+test-env
